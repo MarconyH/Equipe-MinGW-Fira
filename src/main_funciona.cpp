@@ -116,7 +116,8 @@ void contador_direita(){
   //Zera os contadores e reinicia a contagem de tempo.
   contador1 = 0;
   contador2 = 0;
-  tempo_antes = millis();}
+  tempo_antes = millis();
+  }
 }
 
 void contador_esquerda(){
