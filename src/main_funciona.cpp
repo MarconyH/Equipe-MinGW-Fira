@@ -1,16 +1,20 @@
 #include <Arduino.h>
 #include <PID_v1.h>
-#include <SoftwareSerial.h>
 #include <Ultrasonic.h>
 
-#define TRIGD 9  // Pino Trig Sensor Direita
-#define ECHOD A4 // Pino Echo Sensor Direita
+#define TRIGE A0 // Pino Trig Sensor Esquerda
+#define ECHOE A1 // Pino Echo Sensor Esquerda
 
-#define TRIGC A0 // Pino Trig Sensor Centro
-#define ECHOC A1 // Pino Echo Sensor Centro
+#define TRIGC A2 // Pino Trig Sensor Centro
+#define ECHOC A3 // Pino Echo Sensor Centro
 
-#define TRIGE A2 // Pino Trig Sensor Esquerda
-#define ECHOE A3 // Pino Echo Sensor Esquerda
+#define TRIGD A4  // Pino Trig Sensor Direita
+#define ECHOD A5 // Pino Echo Sensor Direita
+
+#define PINO_CH2 2
+#define PINO_CH1 3
+#define PINO_CH3 4
+#define PINO_CH4 5
 
 #define ENA 5 // ENA PWM Motor Esquerdo
 #define ENB 6 // ENB PWM Motor Direito
@@ -21,10 +25,6 @@
 #define IN3 7 // DIR Motor Direito
 #define IN4 8 // DIR Motor Direito
 
-#define POTK A5 // Pino potenciômetro
-
-SoftwareSerial bluetooth(8, 9); // rx, tx amarelo e verde respectivamente
-
 Ultrasonic sensorD(TRIGD, ECHOD);
 Ultrasonic sensorE(TRIGE, ECHOE);
 Ultrasonic sensorC(TRIGC, ECHOC);
@@ -34,9 +34,28 @@ float distanciaE;
 double distanciaC;
 float distanciaD;
 
+int estado;
+int ultimo_estado;
+boolean sentido;
+
 float speed = 1.0; // throttle in % percent
 unsigned long time;
 /*Parâmetros para ajustar*/
+//Declaracao das variaveis auxiliares para o calculo da velocidade
+unsigned long contador1;
+unsigned long contador2;
+unsigned long contador3;
+unsigned long contador4;
+const int NUMERO_CONTADORES = 2;
+const int NUMERO_LEITURAS = 2;
+//Variavel de numero de dentes do disco de leitura
+const int NUMERO_DENTES = 6; //Altere se necessario
+
+//Declaracao das variaveis auxiliares para a temporizacao de um minuto
+unsigned long tempo_antes = 0;
+const long tempo_atual = 1000;
+
+//-----------------------------------------------
 
 // Valor máximo 255 para potência total
 // float VEL_MAX = 90;
@@ -58,6 +77,8 @@ double SetpointCentral = 15;
 double kpCentral = 5.0, kiCentral = 3.5, kdCentral = 2.0;
 PID PIDc(&distanciaC, &OutputC, &SetpointCentral, kpCentral, kiCentral,
          kdCentral, REVERSE);
+
+
 
 void ler_sensores()
 {
@@ -84,6 +105,64 @@ void ler_sensores()
               microsec, Ultrasonic::CM)); // filtro(sensorC.convert(microsec,
                                           // Ultrasonic::CM), distanciaC, 1.0);
 }
+
+void contador_direita(){
+  if ((millis() - tempo_antes) > tempo_atual) { //A cada um minuto
+
+  //Calcula a velocidade e exibe no monitor
+  int media = (contador1 + contador2) / (NUMERO_CONTADORES); //Calcula a media dos contadores
+  int velocidade = (media / (NUMERO_DENTES  * NUMERO_LEITURAS))*60; //Calcula a velocidade de acordo com o numero de dentes do disco
+
+  //Zera os contadores e reinicia a contagem de tempo.
+  contador1 = 0;
+  contador2 = 0;
+  tempo_antes = millis();}
+}
+
+void contador_esquerda(){
+  if ((millis() - tempo_antes) > tempo_atual) { //A cada um minuto
+
+  //Calcula a velocidade e exibe no monitor
+  int media = (contador3 + contador4) / (NUMERO_CONTADORES); //Calcula a media dos contadores
+  int velocidade = (media / (NUMERO_DENTES  * NUMERO_LEITURAS))*60; //Calcula a velocidade de acordo com o numero de dentes do disco
+
+  //Zera os contadores e reinicia a contagem de tempo.
+  contador3 = 0;
+  contador4 = 0;
+  tempo_antes = millis();}
+}
+
+void contador_pulso4() {
+
+  //Incrementa o contador
+  contador4++;
+
+}
+
+
+void contador_pulso3() {
+
+  //Incrementa o contador
+  contador3++;
+
+}
+
+//Funcao de interrupcao
+void contador_pulso2() {
+
+  //Incrementa o contador
+  contador2++;
+
+}
+
+//Funcao de interrupcao
+void contador_pulso1() {
+
+  //Incrementa o contador
+  contador1++;
+
+}
+
 
 void imprimeDistancias()
 {
@@ -152,7 +231,13 @@ void setup()
   pinMode(ECHOE, INPUT);
   pinMode(TRIGC, OUTPUT);
   pinMode(ECHOC, INPUT);
-  pinMode(POTK, INPUT);
+  pinMode(PINO_CH2, INPUT);
+  pinMode(PINO_CH1, INPUT);
+
+  attachInterrupt(digitalPinToInterrupt(PINO_CH2), contador_pulso2, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(PINO_CH1), contador_pulso1, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(PINO_CH2), contador_pulso3, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(PINO_CH1), contador_pulso4, CHANGE);
 
   PIDc.SetSampleTime(10);
   PIDc.SetMode(AUTOMATIC);
@@ -166,6 +251,8 @@ void setup()
   //   PIDc.SetOutputLimits(MIN_VOLTAGE_ESQ, MAX_VOLTAGE);
   // }
     PIDc.SetOutputLimits(70, MAX_VOLTAGE);
+
+    
 
   ler_sensores();
   delay(2000);
@@ -313,7 +400,7 @@ int *livre()
 {
   int vector[3] = {1, 0, 1};
   //se o sensor da frente for maior que 30 centímetros, então está livre
-  sensorC >= 30 ? vector[1] = 1: vector[1] = 0;
+  //sensorC >= 30 ? vector[1] = 1: vector[1] = 0;
 
   return vector;
 }
@@ -323,6 +410,8 @@ void loop()
   while (true)
   {
     ler_sensores();
+    contadores();
+    /*
     int *vector = livre();
     if(vector[2])
     {
@@ -342,6 +431,6 @@ void loop()
       {
         virar_direita();
       }
-    }
+    }*/
   }
 }
