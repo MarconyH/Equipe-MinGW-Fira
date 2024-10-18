@@ -11,7 +11,7 @@
 #define TRIGD A4  // Pino Trig Sensor Direita
 #define ECHOD A5 // Pino Echo Sensor Direita
 
-#define PINO_CH1 3
+#define PINO_CH1 6
 #define PINO_CH2 2  
 #define PINO_CH3 4
 #define PINO_CH4 5
