@@ -11,8 +11,8 @@
 #define TRIGD A4  // Pino Trig Sensor Direita
 #define ECHOD A5 // Pino Echo Sensor Direita
 
-#define PINO_CH2 2
 #define PINO_CH1 3
+#define PINO_CH2 2  
 #define PINO_CH3 4
 #define PINO_CH4 5
 
@@ -70,7 +70,7 @@ const long tempo_atual = 1000;
 
 float MAX_DELTA = 40;
 
-float MAX_VOLTAGE = 87;
+float MAX_VOLTAGE = 113;
 float MIN_VOLTAGE_ESQ = 50;
 float MIN_VOLTAGE_DIR = 30;
 
@@ -184,24 +184,21 @@ void imprimeDistancias()
   Serial.println(" cm");
 }
 
-float tratamento(float vel, float MIN_VOLTAGE)
+float tratamento(float vel)
 {
-  if (vel > MAX_VOLTAGE)
-  {
-    vel = MAX_VOLTAGE;
-  }
-  if (vel < MIN_VOLTAGE)
-  {
-    vel = MIN_VOLTAGE;
-  }
+  vel = min(vel, 100);
+  vel = max(vel, 0);
   vel = (vel)*MAX_VOLTAGE / 100;
   return vel;
 }
 
 void acelera(float vel_esquerda, float vel_direita)
 {
-  int vel_direita_int = ceil(tratamento((vel_direita* OutputC / MAX_VOLTAGE), MIN_VOLTAGE_DIR));
-  int vel_esquerda_int = ceil(tratamento((vel_esquerda* OutputC / MAX_VOLTAGE), MIN_VOLTAGE_ESQ));
+  // int vel_direita_int = ceil(tratamento((vel_direita* OutputC / MAX_VOLTAGE), MIN_VOLTAGE_DIR));
+  // int vel_esquerda_int = ceil(tratamento((vel_esquerda* OutputC / MAX_VOLTAGE), MIN_VOLTAGE_ESQ));
+
+  int vel_direita_int = ceil(tratamento((vel_direita)));
+  int vel_esquerda_int = ceil(tratamento((vel_esquerda)));
 
   digitalWrite(IN3, HIGH);
   digitalWrite(IN4, LOW);
@@ -416,9 +413,31 @@ void loop()
 {
   while (true)
   {
-    ler_sensores();
-    int diferenca = velocidadeE - velocidadeD;
-    seguir_em_frente(velocidadeE, velocidadeD + diferenca);
+    
+    for (int i = 0; i <= 100; i += 10)
+    {
+      int tempo_atual = millis();
+      acelera(i,i);
+      while (tempo_atual - millis() < 1000 * 60 * 5)
+      {
+        ler_sensores();
+        Serial.print("i: ");
+        Serial.println(i);
+        Serial.print("Velocidade Esquerda: ");
+        Serial.println(velocidadeE);
+        Serial.print("Velocidade Direita: ");
+        Serial.println(velocidadeD);
+      }
+      delay(1000); 
+    }
+    while (true)
+    {
+      acelera(0,0);
+    }
+    
+    
+    //int diferenca = velocidadeE - velocidadeD;
+    //seguir_em_frente(velocidadeE, velocidadeD + diferenca);
     /*
     int *vector = livre();
     if(vector[2])
