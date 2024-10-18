@@ -38,9 +38,14 @@ int estado;
 int ultimo_estado;
 boolean sentido;
 
+//Velocidade em rpm da roda esquerda e direita
+int velocidadeD = 0;
+int velocidadeE = 0;
+
 float speed = 1.0; // throttle in % percent
 unsigned long time;
 /*Parâmetros para ajustar*/
+
 //Declaracao das variaveis auxiliares para o calculo da velocidade
 unsigned long contador1;
 unsigned long contador2;
@@ -49,10 +54,11 @@ unsigned long contador4;
 const int NUMERO_CONTADORES = 2;
 const int NUMERO_LEITURAS = 2;
 //Variavel de numero de dentes do disco de leitura
-const int NUMERO_DENTES = 6; //Altere se necessario
+const int NUMERO_DENTES = 10; //Altere se necessario
 
 //Declaracao das variaveis auxiliares para a temporizacao de um minuto
-unsigned long tempo_antes = 0;
+unsigned long tempo_antes_direita = 0;
+unsigned long tempo_antes_esquerda = 0;
 const long tempo_atual = 1000;
 
 //-----------------------------------------------
@@ -104,40 +110,43 @@ void ler_sensores()
           sensorC.convert(
               microsec, Ultrasonic::CM)); // filtro(sensorC.convert(microsec,
                                           // Ultrasonic::CM), distanciaC, 1.0);
+  contador_direita();
+  contador_esquerda();
 }
 
 void contador_direita(){
-  if ((millis() - tempo_antes) > tempo_atual) { //A cada um minuto
+  if ((millis() - tempo_antes_direita) > tempo_atual) { //A cada um segundo
 
   //Calcula a velocidade e exibe no monitor
   int media = (contador1 + contador2) / (NUMERO_CONTADORES); //Calcula a media dos contadores
-  int velocidade = (media / (NUMERO_DENTES  * NUMERO_LEITURAS))*60; //Calcula a velocidade de acordo com o numero de dentes do disco
+  velocidadeD = (media / (NUMERO_DENTES  * NUMERO_LEITURAS))*60; //Calcula a velocidade de acordo com o numero de dentes do disco
 
   //Zera os contadores e reinicia a contagem de tempo.
   contador1 = 0;
   contador2 = 0;
-  tempo_antes = millis();
+  tempo_antes_direita = millis();
   }
 }
 
 void contador_esquerda(){
-  if ((millis() - tempo_antes) > tempo_atual) { //A cada um minuto
+  if ((millis() - tempo_antes_esquerda) > tempo_atual) { //A cada um segundo
 
-  //Calcula a velocidade e exibe no monitor
+  //Calcula a velocidade
   int media = (contador3 + contador4) / (NUMERO_CONTADORES); //Calcula a media dos contadores
-  int velocidade = (media / (NUMERO_DENTES  * NUMERO_LEITURAS))*60; //Calcula a velocidade de acordo com o numero de dentes do disco
+  velocidadeE = (media / (NUMERO_DENTES  * NUMERO_LEITURAS))*60; //Calcula a velocidade de acordo com o numero de dentes do disco
 
   //Zera os contadores e reinicia a contagem de tempo.
   contador3 = 0;
   contador4 = 0;
-  tempo_antes = millis();}
+  tempo_antes_esquerda = millis();
+  }
+
 }
 
 void contador_pulso4() {
 
   //Incrementa o contador
   contador4++;
-
 }
 
 
@@ -145,7 +154,6 @@ void contador_pulso3() {
 
   //Incrementa o contador
   contador3++;
-
 }
 
 //Funcao de interrupcao
@@ -153,7 +161,6 @@ void contador_pulso2() {
 
   //Incrementa o contador
   contador2++;
-
 }
 
 //Funcao de interrupcao
@@ -161,7 +168,6 @@ void contador_pulso1() {
 
   //Incrementa o contador
   contador1++;
-
 }
 
 
@@ -235,10 +241,10 @@ void setup()
   pinMode(PINO_CH2, INPUT);
   pinMode(PINO_CH1, INPUT);
 
-  attachInterrupt(digitalPinToInterrupt(PINO_CH2), contador_pulso2, CHANGE);
   attachInterrupt(digitalPinToInterrupt(PINO_CH1), contador_pulso1, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(PINO_CH2), contador_pulso3, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(PINO_CH1), contador_pulso4, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(PINO_CH2), contador_pulso2, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(PINO_CH3), contador_pulso3, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(PINO_CH4), contador_pulso4, CHANGE);
 
   PIDc.SetSampleTime(10);
   PIDc.SetMode(AUTOMATIC);
@@ -411,7 +417,8 @@ void loop()
   while (true)
   {
     ler_sensores();
-    contadores();
+    int diferenca = velocidadeE - velocidadeD;
+    seguir_em_frente(velocidadeE, velocidadeD + diferenca);
     /*
     int *vector = livre();
     if(vector[2])
