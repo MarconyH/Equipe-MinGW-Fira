@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <PID_v1.h>
 #include <Ultrasonic.h>
+#include <PinChangeInterrupt.h>
 
 #define TRIGE A0 // Pino Trig Sensor Esquerda
 #define ECHOE A1 // Pino Echo Sensor Esquerda
@@ -258,8 +259,9 @@ void setup()
 
   attachInterrupt(digitalPinToInterrupt(PINO_CH1), contador_pulso1_sensor1, CHANGE);
   attachInterrupt(digitalPinToInterrupt(PINO_CH2), contador_pulso2_sensor1, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(PINO_CH3), contador_pulso1_sensor2, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(PINO_CH4), contador_pulso2_sensor2, CHANGE);
+  
+  attachPCINT(digitalPinToPCINT(PINO_CH3), contador_pulso1_sensor2, CHANGE);
+  attachPCINT(digitalPinToPCINT(PINO_CH4), contador_pulso2_sensor2, CHANGE);
 
   PIDc.SetSampleTime(10);
   PIDc.SetMode(AUTOMATIC);
