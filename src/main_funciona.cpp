@@ -63,7 +63,7 @@ unsigned long contador2_sensor2;
 const int NUMERO_CONTADORES = 2;
 const int NUMERO_LEITURAS = 2;
 // Variavel de numero de dentes do disco de leitura
-const int NUMERO_DENTES = 6; // Altere se necessario
+const int NUMERO_DENTES = 10; // Altere se necessario
 
 // Declaracao das variaveis auxiliares para a temporizacao de um minuto
 unsigned long tempo_antes_sensor1 = 0;
@@ -443,8 +443,9 @@ int rotacao_RPM_sensor1()
   //  }
 
   // Calcula a velocidade e exibe no monitor
-  int media = (contador1_sensor1 + contador2_sensor1) / (NUMERO_CONTADORES); // Calcula a media dos contadores
-  int velocidade = media / (NUMERO_DENTES * NUMERO_LEITURAS);                // Calcula a velocidade de acordo com o numero de dentes do disco
+  float media = (contador1_sensor1 + contador2_sensor1) / (NUMERO_CONTADORES); // Calcula a media dos contadores
+  float velocidade = media / (NUMERO_DENTES * NUMERO_LEITURAS);                // Calcula a velocidade de acordo com o numero de dentes do disco
+  velocidade *= 60;
   // Serial.print("Velocidade: ");
   // Serial.print(velocidade);
   // Serial.println(" RPM");
@@ -453,7 +454,7 @@ int rotacao_RPM_sensor1()
   contador1_sensor1 = 0;
   contador2_sensor1 = 0;
 
-  return velocidade;
+  return round(velocidade);
   // tempo_antes = millis();
   // }
 }
@@ -474,8 +475,9 @@ int rotacao_RPM_sensor2()
   //  }
 
   // Calcula a velocidade e exibe no monitor
-  int media = (contador1_sensor2 + contador2_sensor2) / (NUMERO_CONTADORES); // Calcula a media dos contadores
-  int velocidade = media / (NUMERO_DENTES * NUMERO_LEITURAS);                // Calcula a velocidade de acordo com o numero de dentes do disco
+  float media = (contador1_sensor2 + contador2_sensor2) / (NUMERO_CONTADORES); // Calcula a media dos contadores
+  float velocidade = media / (NUMERO_DENTES * NUMERO_LEITURAS);                // Calcula a velocidade de acordo com o numero de dentes do disco
+  velocidade *= 60;
   // Serial.print("Velocidade: ");
   // Serial.print(velocidade);
   // Serial.println(" RPM");
@@ -484,7 +486,7 @@ int rotacao_RPM_sensor2()
   contador1_sensor2 = 0;
   contador2_sensor2 = 0;
 
-  return velocidade;
+  return round(velocidade);
   // tempo_antes = millis();
   // }
 }
@@ -524,20 +526,21 @@ void loop()
   // }
   while (true)
   {
+    unsigned long tempo_limite = 1000 * 32;
 
-    for (int i = 0; i <= 100; i += 10)
+    for (int i = 0; i <= 100; i += 5)
     {
+
+      acelera(100, 100);
+      delay(100);
+
+      acelera(i,i);
+      delay(100);
+
       unsigned long tempo_atual = millis();
-
-      acelera(i, i);
-
-      while (millis() - tempo_atual < 1000 * 10 * 1)
+      while (millis() - tempo_atual < tempo_limite)
       {
         /* code */
-
-        Serial.print("A diferença entre o millis e tempo atual: ");
-        Serial.print(millis() - tempo_atual);
-        Serial.println();
 
         ler_sensores();
         Serial.print("i: ");
@@ -550,9 +553,9 @@ void loop()
       //  delay(1000);
     }
 
-    // while (true)
-    // {
-    //   acelera(0, 0);
-    // }
+    while (true)
+    {
+      acelera(0, 0);
+    }
   }
 }
