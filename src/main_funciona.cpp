@@ -259,7 +259,7 @@ void setup()
 
   attachInterrupt(digitalPinToInterrupt(PINO_CH1), contador_pulso1_sensor1, CHANGE);
   attachInterrupt(digitalPinToInterrupt(PINO_CH2), contador_pulso2_sensor1, CHANGE);
-  
+
   attachPCINT(digitalPinToPCINT(PINO_CH3), contador_pulso1_sensor2, CHANGE);
   attachPCINT(digitalPinToPCINT(PINO_CH4), contador_pulso2_sensor2, CHANGE);
 
@@ -427,7 +427,7 @@ int *livre()
   return vector;
 }
 
-void rotacao_RPM_sensor1()
+int rotacao_RPM_sensor1()
 {
   // Verifica a contagem de tempo e exibe as informacoes coletadas do motor
   // if ((millis() - tempo_antes) > MINUTO)
@@ -445,18 +445,20 @@ void rotacao_RPM_sensor1()
   // Calcula a velocidade e exibe no monitor
   int media = (contador1_sensor1 + contador2_sensor1) / (NUMERO_CONTADORES); // Calcula a media dos contadores
   int velocidade = media / (NUMERO_DENTES * NUMERO_LEITURAS);                // Calcula a velocidade de acordo com o numero de dentes do disco
-  Serial.print("Velocidade: ");
-  Serial.print(velocidade);
-  Serial.println(" RPM");
+  // Serial.print("Velocidade: ");
+  // Serial.print(velocidade);
+  // Serial.println(" RPM");
 
   // Zera os contadores e reinicia a contagem de tempo.
   contador1_sensor1 = 0;
   contador2_sensor1 = 0;
+
+  return velocidade;
   // tempo_antes = millis();
   // }
 }
 
-void rotacao_RPM_sensor2()
+int rotacao_RPM_sensor2()
 {
   // Verifica a contagem de tempo e exibe as informacoes coletadas do motor
   // if ((millis() - tempo_antes) > MINUTO)
@@ -474,17 +476,18 @@ void rotacao_RPM_sensor2()
   // Calcula a velocidade e exibe no monitor
   int media = (contador1_sensor2 + contador2_sensor2) / (NUMERO_CONTADORES); // Calcula a media dos contadores
   int velocidade = media / (NUMERO_DENTES * NUMERO_LEITURAS);                // Calcula a velocidade de acordo com o numero de dentes do disco
-  Serial.print("Velocidade: ");
-  Serial.print(velocidade);
-  Serial.println(" RPM");
+  // Serial.print("Velocidade: ");
+  // Serial.print(velocidade);
+  // Serial.println(" RPM");
 
   // Zera os contadores e reinicia a contagem de tempo.
   contador1_sensor2 = 0;
   contador2_sensor2 = 0;
+
+  return velocidade;
   // tempo_antes = millis();
   // }
 }
-
 
 void loop()
 {
@@ -526,7 +529,7 @@ void loop()
     {
       unsigned long tempo_atual = millis();
 
-      acelera(70, 70);
+      acelera(i, i);
 
       while (millis() - tempo_atual < 1000 * 10 * 1)
       {
@@ -540,9 +543,9 @@ void loop()
         Serial.print("i: ");
         Serial.println(i);
         Serial.print("Velocidade Esquerda: ");
-        rotacao_RPM_sensor2();
+        Serial.println(rotacao_RPM_sensor2());
         Serial.print("Velocidade Direita: ");
-        rotacao_RPM_sensor1();
+        Serial.println(rotacao_RPM_sensor1());
       }
       //  delay(1000);
     }
