@@ -17,8 +17,8 @@
 #define PINO_CH3 10
 #define PINO_CH4 11
 
-#define ENA 6 // ENA PWM Motor Esquerdo
-#define ENB 5 // ENB PWM Motor Direito
+#define ENA 5 // ENA PWM Motor Esquerdo
+#define ENB 6 // ENB PWM Motor Direito
 
 #define IN1 7 // DIR Motor Esquerdo
 #define IN2 7 // DIR Motor Esquerdo
@@ -31,6 +31,9 @@ Ultrasonic sensorE(TRIGE, ECHOE);
 Ultrasonic sensorC(TRIGC, ECHOC);
 
 // Variáveis Globais
+float tamanho_carrinho;
+float tamanho_pista;
+
 float distanciaE;
 double distanciaC;
 float distanciaD;
@@ -39,7 +42,6 @@ float distanciaD;
 int velocidadeD = 0;
 int velocidadeE = 0;
 
-float speed = 1.0; // throttle in % percent
 unsigned long time;
 /*Parâmetros para ajustar*/
 
@@ -103,23 +105,23 @@ double kpCentral = 5.0, kiCentral = 3.5, kdCentral = 2.0;
 PID PIDc(&distanciaC, &OutputC, &SetpointCentral, kpCentral, kiCentral,
          kdCentral, REVERSE);
 
+int ajuste_rpm(int melhor = 1);
+
 void ler_sensores()
 {
   long microsec = sensorE.timing();
   distanciaE =
-      min(MAX_DELTA + 1.6,
+      min(MAX_DELTA,
           sensorE.convert(
               microsec, Ultrasonic::CM)); // filtro(sensorE.convert(microsec,
                                           // Ultrasonic::CM), distanciaE, 1.0);
-  distanciaE = max(0, distanciaE - 1.6);
 
   microsec = sensorD.timing();
   distanciaD = min(
-      MAX_DELTA + 1.5,
+      MAX_DELTA,
       sensorD.convert(microsec,
                       Ultrasonic::CM)); // filtro(sensorD.convert(microsec,
                                         // Ultrasonic::CM), distanciaD, 1.0);
-  distanciaD = max(0, distanciaD - 1.5);
 
   microsec = sensorC.timing();
   distanciaC =
@@ -215,17 +217,22 @@ float tratamento(float vel)
   return vel;
 }
 
-void acelera(float vel_esquerda, float vel_direita)
+void acelera(float vel_esquerda, float vel_direita, int ajustar_rpm = 0)
 {
   // int vel_direita_int = ceil(tratamento((vel_direita* OutputC / MAX_VOLTAGE), MIN_VOLTAGE_DIR));
   // int vel_esquerda_int = ceil(tratamento((vel_esquerda* OutputC / MAX_VOLTAGE), MIN_VOLTAGE_ESQ));
 
-  int vel_direita_int = ceil(tratamento((vel_direita)));
-  int vel_esquerda_int = ceil(tratamento((vel_esquerda)));
+  int vel_direita_int = round(tratamento((vel_direita)));
+  int vel_esquerda_int = round(tratamento((vel_esquerda)));
 
-  analogWrite(ENB, vel_esquerda_int);
+  if (ajustar_rpm)
+  {
+    vel_direita_int = ajuste_rpm();
+  }
 
-  analogWrite(ENA, vel_direita_int);
+  analogWrite(ENA, vel_esquerda_int);
+
+  analogWrite(ENB, vel_direita_int);
 }
 
 void back()
@@ -239,48 +246,6 @@ void back()
   analogWrite(ENA, MAX_VOLTAGE);
 }
 
-void setup()
-{
-  Serial.begin(9600); // Comunicação Serial com o Computador
-  pinMode(ENA, OUTPUT);
-  pinMode(ENB, OUTPUT);
-  pinMode(IN1, OUTPUT); // definição dos pinos entradas e saidas
-  pinMode(IN2, OUTPUT);
-  pinMode(IN3, OUTPUT); // OUTPUT = Saída
-  pinMode(IN4, OUTPUT); // INPUT = Entrada
-  pinMode(TRIGD, OUTPUT);
-  pinMode(ECHOD, INPUT);
-  pinMode(TRIGE, OUTPUT);
-  pinMode(ECHOE, INPUT);
-  pinMode(TRIGC, OUTPUT);
-  pinMode(ECHOC, INPUT);
-  pinMode(PINO_CH2, INPUT);
-  pinMode(PINO_CH1, INPUT);
-
-  attachInterrupt(digitalPinToInterrupt(PINO_CH1), contador_pulso1_sensor1, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(PINO_CH2), contador_pulso2_sensor1, CHANGE);
-
-  attachPCINT(digitalPinToPCINT(PINO_CH3), contador_pulso1_sensor2, CHANGE);
-  attachPCINT(digitalPinToPCINT(PINO_CH4), contador_pulso2_sensor2, CHANGE);
-
-  PIDc.SetSampleTime(10);
-  PIDc.SetMode(AUTOMATIC);
-  PIDc.SetTunings(kpCentral, kiCentral, kdCentral);
-  // if (MIN_VOLTAGE_DIR < MIN_VOLTAGE_ESQ)
-  // {
-  //   PIDc.SetOutputLimits(MIN_VOLTAGE_DIR, MAX_VOLTAGE);
-  // }
-  // else
-  // {
-  //   PIDc.SetOutputLimits(MIN_VOLTAGE_ESQ, MAX_VOLTAGE);
-  // }
-  PIDc.SetOutputLimits(70, MAX_VOLTAGE);
-
-  ler_sensores();
-  delay(2000);
-  time = millis();
-  // last_time = time;
-}
 
 // unsigned long time_here_left = 0;
 // unsigned long time_here_right = 0;
@@ -376,57 +341,6 @@ void ajuste(float delta)
   // last_time = millis();
 }
 
-// THROTTLE COM FUNÇÃO QUADRATICA QUE NAO SABEMOS COMO, MAS FUNCIONA
-void throttle()
-{
-  float a = 2.0 / 18.0;
-  // float b = 2.0/3.0;
-  // float valorC = ((a * distanciaC * distanciaC) - (b * distanciaC))/100;
-  float valorC = (distanciaC * distanciaC * a);
-  unsigned long delta_time = millis() - time;
-  // int delta = distanciaE - distanciaD;
-
-  float step = 0.0;
-  if (delta_time > 50)
-  {
-    time = millis();
-    step = sqrt(speed / 100.0);
-    step += 0.002;
-    step = min(step, 1.0);
-
-    speed = max(0.35, (step * step));
-
-    speed = ceil(min(100, max(0, (speed * 100))));
-
-    MAX_VOLTAGE = max(0.35, valorC * speed);
-    MAX_VOLTAGE = min(MAX_VOLTAGE * 100, 100);
-    // analogWrite(IN3, 0);
-    // analogWrite(IN4, 0);
-    // analogWrite(ENB, valorC * speed); // direita
-    // analogWrite(INB, speed);
-
-    // analogWrite(IN1, 0);
-    // analogWrite(IN2, 0);
-    // analogWrite(ENA, max(0.35, valorC * speed));
-    // analogWrite(INA, speed);
-
-    Serial.print("SPEED: ");
-    Serial.println(speed);
-    Serial.print("MAX: ");
-    Serial.println(MAX_VOLTAGE);
-  }
-}
-
-// posição 0 esquerda, 1 centro, 2 direita
-int *livre()
-{
-  int vector[3] = {1, 0, 1};
-  // se o sensor da frente for maior que 30 centímetros, então está livre
-  // sensorC >= 30 ? vector[1] = 1: vector[1] = 0;
-
-  return vector;
-}
-
 int rotacao_RPM_sensor1()
 {
   // Verifica a contagem de tempo e exibe as informacoes coletadas do motor
@@ -491,22 +405,143 @@ int rotacao_RPM_sensor2()
   // }
 }
 
+// posição 0 esquerda, 1 centro, 2 direita
+int *livre()
+{
+  int *vector = new int[3];
+  //0 não está livre
+  // 1 está livre
+  distanciaE < tamanho_pista*1.1 ? vector[0] = 0: vector[0] = 1;
+
+  distanciaC <= (tamanho_pista - tamanho_carrinho)/2 ? vector[1] = 0: vector[1] = 1;
+  
+  distanciaD < tamanho_pista*1.1 ? vector[2] = 0: vector[2] = 1;
+
+  return vector;
+}
+
+
+//melhor roda
+double rpm_direta(float x)
+{
+  return x+x;
+}
+
+double rpm_esquerdo(float x)
+{
+  return x+x/2;
+}
+
+int ajuste_rpm(int velocidade_melhor_real = velocidadeD, int velocidade_pior_real = velocidadeE)
+{
+
+  int diferenca_real = abs(velocidade_pior_real - velocidade_melhor_real);
+  int menor_diferenca = 0;
+
+    for (int i = 0; i <= 100; i++)
+    {
+      if (abs(rpm_esquerdo(menor_diferenca) - velocidade_melhor_real) > abs(rpm_esquerdo(i) - velocidade_melhor_real))
+      {
+        menor_diferenca = i;
+      }
+    }
+    return abs(rpm_esquerdo(menor_diferenca) - velocidade_melhor_real) < diferenca_real ? menor_diferenca: -1;
+  
+}
+
+void frente(int *vector)
+{
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN3, HIGH);
+  acelera(80,80);
+}
+
+void virar_direita(int *vector)
+{
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN3, HIGH);
+  acelera(80, 80);
+  delay(550);
+  if(vector[1]){
+    frente(vector);
+    delay(100);
+  }
+}
+
+void virar_esquerda(int *vector)
+{
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN3, LOW);
+  acelera(80, 80);
+  delay(550);
+  if(vector[1]){
+    frente(vector);
+    delay(100);
+  }
+}
+
+void setup()
+{
+  Serial.begin(9600); // Comunicação Serial com o Computador
+  pinMode(ENA, OUTPUT);
+  pinMode(ENB, OUTPUT);
+  pinMode(IN1, OUTPUT); // definição dos pinos entradas e saidas
+  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT); // OUTPUT = Saída
+  pinMode(IN4, OUTPUT); // INPUT = Entrada
+  pinMode(TRIGD, OUTPUT);
+  pinMode(ECHOD, INPUT);
+  pinMode(TRIGE, OUTPUT);
+  pinMode(ECHOE, INPUT);
+  pinMode(TRIGC, OUTPUT);
+  pinMode(ECHOC, INPUT);
+  pinMode(PINO_CH2, INPUT);
+  pinMode(PINO_CH1, INPUT);
+
+  attachInterrupt(digitalPinToInterrupt(PINO_CH1), contador_pulso1_sensor1, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(PINO_CH2), contador_pulso2_sensor1, CHANGE);
+
+  attachPCINT(digitalPinToPCINT(PINO_CH3), contador_pulso1_sensor2, CHANGE);
+  attachPCINT(digitalPinToPCINT(PINO_CH4), contador_pulso2_sensor2, CHANGE);
+
+  PIDc.SetSampleTime(10);
+  PIDc.SetMode(AUTOMATIC);
+  PIDc.SetTunings(kpCentral, kiCentral, kdCentral);
+  // if (MIN_VOLTAGE_DIR < MIN_VOLTAGE_ESQ)
+  // {
+  //   PIDc.SetOutputLimits(MIN_VOLTAGE_DIR, MAX_VOLTAGE);
+  // }
+  // else
+  // {
+  //   PIDc.SetOutputLimits(MIN_VOLTAGE_ESQ, MAX_VOLTAGE);
+  // }
+  PIDc.SetOutputLimits(70, MAX_VOLTAGE);
+
+  ler_sensores();
+  delay(2000);
+  time = millis();
+  // last_time = time;
+  // acelera(90,90);
+  // delay(500);
+  // tamanho_pista = distanciaD + distanciaE + tamanho_carrinho; 
+}
+
 void loop()
 {
   // ler_sensores();
   // float delta = distanciaE - distanciaD;
   // int delta_velocidade = velocidadeE - velocidadeD;
 
-  // acelera(100, 100 + delta_velocidade);
-
   // int *vector = livre();
   // if(vector[2])
   // {
-  //   // virar_direita();
+  //   frente(vector);
+  //   delay(50);
+  //   virar_direita(vector);
   // }
   // if(vector[1])
   // {
-  //   // frente();
+  //   frente(vector);
   //   if (!vector[2] && !vector[0])
   //   {
   //     ajuste(delta);
@@ -517,45 +552,56 @@ void loop()
   // {
   //   if(vector[0])
   //   {
-  //     // virar_esquerda();
+  //     virar_esquerda(vector);
   //   }
   //   else
   //   {
-  //     // virar_direita();
+  //     virar_direita(vector);
   //   }
   // }
+
+  int vector[3] = {0, 0, 1};
+  virar_esquerda(vector);
   while (true)
   {
-    unsigned long tempo_limite = 1000 * 32;
-
-    for (int i = 0; i <= 100; i += 5)
-    {
-
-      acelera(100, 100);
-      delay(100);
-
-      acelera(i,i);
-      delay(100);
-
-      unsigned long tempo_atual = millis();
-      while (millis() - tempo_atual < tempo_limite)
-      {
-        /* code */
-
-        ler_sensores();
-        Serial.print("i: ");
-        Serial.println(i);
-        Serial.print("Velocidade Esquerda: ");
-        Serial.println(rotacao_RPM_sensor2());
-        Serial.print("Velocidade Direita: ");
-        Serial.println(rotacao_RPM_sensor1());
-      }
-      //  delay(1000);
-    }
-
-    while (true)
-    {
-      acelera(0, 0);
-    }
+    acelera(0,0);
   }
+  
+
+
+  //capturar valores das rodas
+  // while (true)
+  // {
+  //   unsigned long tempo_limite = 1000 * 32;
+
+  //   for (int i = 0; i <= 100; i += 5)
+  //   {
+
+  //     acelera(100, 100);
+  //     delay(100);
+
+  //     acelera(i,i);
+  //     delay(100);
+
+  //     unsigned long tempo_atual = millis();
+  //     while (millis() - tempo_atual < tempo_limite)
+  //     {
+  //       /* code */
+
+  //       ler_sensores();
+  //       Serial.print("i: ");
+  //       Serial.println(i);
+  //       Serial.print("Velocidade Esquerda: ");
+  //       Serial.println(rotacao_RPM_sensor2());
+  //       Serial.print("Velocidade Direita: ");
+  //       Serial.println(rotacao_RPM_sensor1());
+  //     }
+  //     //  delay(1000);
+  //   }
+
+  //   while (true)
+  //   {
+  //     acelera(0, 0);
+  //   }
+  // }
 }
