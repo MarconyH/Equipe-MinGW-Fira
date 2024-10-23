@@ -1,18 +1,8 @@
 #include <Arduino.h>
 #include <PID_v1.h>
-#include <Ultrasonic.h>
 #include <PinChangeInterrupt.h>
 #include <Wire.h>
 #include <VL53L1X.h>
-
-#define TRIGE A0 // Pino Trig Sensor Esquerda
-#define ECHOE A1 // Pino Echo Sensor Esquerda
-
-#define TRIGC A2 // Pino Trig Sensor Centro
-#define ECHOC A3 // Pino Echo Sensor Centro
-
-#define TRIGD A4 // Pino Trig Sensor Direita
-#define ECHOD A5 // Pino Echo Sensor Direita
 
 #define PINO_CH1 3
 #define PINO_CH2 2
@@ -28,10 +18,13 @@
 #define IN3 8 // DIR Motor Direito
 #define IN4 8 // DIR Motor Direito
 
-Ultrasonic sensorD(TRIGD, ECHOD);
-Ultrasonic sensorE(TRIGE, ECHOE);
-Ultrasonic sensorC(TRIGC, ECHOC);
+const uint8_t xshutPinsE = 12;
+const uint8_t xshutPinsC = 9;
+const uint8_t xshutPinsD = 4;
 
+VL53L1X sensorE;
+VL53L1X sensorC;
+VL53L1X sensorD;
 
 // Variáveis Globais
 float tamanho_carrinho;
@@ -110,26 +103,14 @@ PID PIDc(&distanciaC, &OutputC, &SetpointCentral, kpCentral, kiCentral,
 
 void ler_sensores()
 {
-  long microsec = sensorE.timing();
-  distanciaE =
-      min(MAX_DELTA,
-          sensorE.convert(
-              microsec, Ultrasonic::CM)); // filtro(sensorE.convert(microsec,
-                                          // Ultrasonic::CM), distanciaE, 1.0);
+  distanciaE = sensorE.read();
+  sensorE.timeoutOccurred() ? distanciaE = -1 : distanciaE = distanciaE;
 
-  microsec = sensorD.timing();
-  distanciaD = min(
-      MAX_DELTA,
-      sensorD.convert(microsec,
-                      Ultrasonic::CM)); // filtro(sensorD.convert(microsec,
-                                        // Ultrasonic::CM), distanciaD, 1.0);
+  distanciaD = sensorD.read();
+  sensorD.timeoutOccurred() ? distanciaD = -1 : distanciaD = distanciaD;
 
-  microsec = sensorC.timing();
-  distanciaC =
-      min(MAX_DELTA,
-          sensorC.convert(
-              microsec, Ultrasonic::CM)); // filtro(sensorC.convert(microsec,
-                                          // Ultrasonic::CM), distanciaC, 1.0);
+  distanciaC = sensorC.read();
+  sensorC.timeoutOccurred() ? distanciaC = -1 : distanciaC = distanciaC;
 }
 
 // Robocore - Fonte
@@ -201,13 +182,13 @@ void imprimeDistancias()
 {
   Serial.print("Dis Esq: ");
   Serial.print(distanciaE);
-  Serial.print(" cm  /  ");
+  Serial.print(" mm  /  ");
   Serial.print("Dis Cen: ");
   Serial.print(distanciaC);
-  Serial.print(" cm   /  ");
+  Serial.print(" mm   /  ");
   Serial.print("Dis Dir: ");
   Serial.print(distanciaD);
-  Serial.println(" cm");
+  Serial.println(" mm");
 }
 
 float tratamento(float vel)
@@ -248,7 +229,6 @@ void back()
   digitalWrite(IN2, HIGH);
   analogWrite(ENA, MAX_VOLTAGE);
 }
-
 
 // unsigned long time_here_left = 0;
 // unsigned long time_here_right = 0;
@@ -412,27 +392,37 @@ int rotacao_RPM_sensor2()
 int *livre()
 {
   int *vector = new int[3];
-  //0 não está livre
-  // 1 está livre
-  distanciaE < tamanho_pista*1.1 ? vector[0] = 0: vector[0] = 1;
+  // 0 não está livre
+  //  1 está livre
+  distanciaE < tamanho_pista * 1.1 ? vector[0] = 0 : vector[0] = 1;
 
-  distanciaC <= (tamanho_pista - tamanho_carrinho)/2 ? vector[1] = 0: vector[1] = 1;
-  
-  distanciaD < tamanho_pista*1.1 ? vector[2] = 0: vector[2] = 1;
+  distanciaC <= (tamanho_pista - tamanho_carrinho) / 2 ? vector[1] = 0 : vector[1] = 1;
+
+  distanciaD < tamanho_pista * 1.1 ? vector[2] = 0 : vector[2] = 1;
 
   return vector;
 }
 
-
-//melhor roda
+// melhor roda
 double rpm_direta(float x)
 {
-  return x+x;
+  return 5.2822e-9 * pow(x, 6) -
+         8.30698e-7 * pow(x, 5) -
+         3.02739e-5 * pow(x, 4) +
+         0.009833676 * pow(x, 3) -
+         0.372287095 * pow(x, 2) +
+         3.496110355 * x;
 }
 
 double rpm_esquerdo(float x)
 {
-  return x+x/2;
+  return -6.39077e-9 * pow(x, 6) +
+         2.67143e-6 * pow(x, 5) -
+         0.000410143 * pow(x, 4) +
+         0.027383752 * pow(x, 3) -
+         0.6778225 * pow(x, 2) +
+         5.256018147 * x -
+         3.550308947;
 }
 
 int ajuste_rpm(int velocidade_melhor_real, int velocidade_pior_real)
@@ -441,22 +431,21 @@ int ajuste_rpm(int velocidade_melhor_real, int velocidade_pior_real)
   int diferenca_real = abs(velocidade_pior_real - velocidade_melhor_real);
   int menor_diferenca = 0;
 
-    for (int i = 0; i <= 100; i++)
+  for (int i = 0; i <= 100; i++)
+  {
+    if (abs(rpm_esquerdo(menor_diferenca) - velocidade_melhor_real) > abs(rpm_esquerdo(i) - velocidade_melhor_real))
     {
-      if (abs(rpm_esquerdo(menor_diferenca) - velocidade_melhor_real) > abs(rpm_esquerdo(i) - velocidade_melhor_real))
-      {
-        menor_diferenca = i;
-      }
+      menor_diferenca = i;
     }
-    return abs(rpm_esquerdo(menor_diferenca) - velocidade_melhor_real) < diferenca_real ? menor_diferenca: -1;
-  
+  }
+  return abs(rpm_esquerdo(menor_diferenca) - velocidade_melhor_real) < diferenca_real ? menor_diferenca : -1;
 }
 
 void frente(int *vector)
 {
   digitalWrite(IN1, HIGH);
   digitalWrite(IN3, HIGH);
-  acelera(80,80);
+  acelera(80, 80);
 }
 
 void virar_direita(int *vector)
@@ -465,7 +454,8 @@ void virar_direita(int *vector)
   digitalWrite(IN3, HIGH);
   acelera(80, 80);
   delay(550);
-  if(vector[1]){
+  if (vector[1])
+  {
     frente(vector);
     delay(100);
   }
@@ -477,7 +467,8 @@ void virar_esquerda(int *vector)
   digitalWrite(IN3, LOW);
   acelera(80, 80);
   delay(550);
-  if(vector[1]){
+  if (vector[1])
+  {
     frente(vector);
     delay(100);
   }
@@ -492,20 +483,24 @@ void setup()
   pinMode(IN2, OUTPUT);
   pinMode(IN3, OUTPUT); // OUTPUT = Saída
   pinMode(IN4, OUTPUT); // INPUT = Entrada
-  pinMode(TRIGD, OUTPUT);
-  pinMode(ECHOD, INPUT);
-  pinMode(TRIGE, OUTPUT);
-  pinMode(ECHOE, INPUT);
-  pinMode(TRIGC, OUTPUT);
-  pinMode(ECHOC, INPUT);
-  pinMode(PINO_CH2, INPUT);
-  pinMode(PINO_CH1, INPUT);
+
+  Wire.begin();
+  Wire.setClock(400000);
 
   attachInterrupt(digitalPinToInterrupt(PINO_CH1), contador_pulso1_sensor1, CHANGE);
   attachInterrupt(digitalPinToInterrupt(PINO_CH2), contador_pulso2_sensor1, CHANGE);
 
   attachPCINT(digitalPinToPCINT(PINO_CH3), contador_pulso1_sensor2, CHANGE);
   attachPCINT(digitalPinToPCINT(PINO_CH4), contador_pulso2_sensor2, CHANGE);
+
+  pinMode(xshutPinsD, OUTPUT);
+  digitalWrite(xshutPinsD, LOW);
+
+  pinMode(xshutPinsC, OUTPUT);
+  digitalWrite(xshutPinsC, LOW);
+
+  pinMode(xshutPinsE, OUTPUT);
+  digitalWrite(xshutPinsE, LOW);
 
   PIDc.SetSampleTime(10);
   PIDc.SetMode(AUTOMATIC);
@@ -520,13 +515,58 @@ void setup()
   // }
   PIDc.SetOutputLimits(70, MAX_VOLTAGE);
 
+  pinMode(xshutPinsE, INPUT);
+  delay(10);
+
+  sensorE.setTimeout(500);
+  if (!sensorE.init())
+  {
+    Serial.print("Failed to detect and initialize sensor ");
+    Serial.println("E");
+    while (1);
+  }
+
+  pinMode(xshutPinsD, INPUT);
+  delay(10);
+
+  sensorD.setTimeout(500);
+  if (!sensorD.init())
+  {
+    Serial.print("Failed to detect and initialize sensor ");
+    Serial.println("D");
+    while (1);
+  }
+
+  pinMode(xshutPinsC, INPUT);
+  delay(10);
+
+  sensorC.setTimeout(500);
+  if (!sensorC.init())
+  {
+    Serial.print("Failed to detect and initialize sensor ");
+    Serial.println("C");
+    while (1);
+  }
+
+  sensorD.setAddress(0x2A);
+
+  sensorD.startContinuous(50);
+
+  sensorC.setAddress(0x2A + 1);
+
+  sensorC.startContinuous(50);
+
+  sensorE.setAddress(0x2A + 2);
+
+  sensorE.startContinuous(50);
+
   ler_sensores();
   delay(2000);
   time = millis();
   // last_time = time;
   // acelera(90,90);
   // delay(500);
-  // tamanho_pista = distanciaD + distanciaE + tamanho_carrinho; 
+  // tamanho_pista = distanciaD + distanciaE + tamanho_carrinho;
 }
 
 void loop()
@@ -563,19 +603,20 @@ void loop()
   //   }
   // }
 
-  int vector[3] = {0, 0, 1};
-  virar_esquerda(vector);
-  while (true)
-  {
-    acelera(0,0);
-  }
-  
+  ler_sensores();
+  imprimeDistancias();
 
-
-  //capturar valores das rodas
+  // int vector[3] = {0, 0, 1};
+  // virar_esquerda(vector);
   // while (true)
   // {
-  //   unsigned long tempo_limite = 1000 * 32;
+  //   acelera(0,0);
+  // }
+
+  // capturar valores das rodas
+  //  while (true)
+  //  {
+  //    unsigned long tempo_limite = 1000 * 32;
 
   //   for (int i = 0; i <= 100; i += 5)
   //   {
