@@ -18,9 +18,9 @@
 #define IN3 8 // DIR Motor Direito
 #define IN4 8 // DIR Motor Direito
 
-const uint8_t xshutPinsE = 12;
-const uint8_t xshutPinsC = 9;
-const uint8_t xshutPinsD = 4;
+#define xshutPinsE 12
+#define xshutPinsC 9
+#define xshutPinsD 4
 
 VL53L1X sensorE;
 VL53L1X sensorC;
@@ -476,6 +476,8 @@ void virar_esquerda(int *vector)
 
 void setup()
 {
+  while (!Serial) {}
+  
   Serial.begin(9600); // Comunicação Serial com o Computador
   pinMode(ENA, OUTPUT);
   pinMode(ENB, OUTPUT);
@@ -526,6 +528,10 @@ void setup()
     while (1);
   }
 
+  sensorE.setAddress(0x2A);
+
+  sensorE.startContinuous(50);
+
   pinMode(xshutPinsD, INPUT);
   delay(10);
 
@@ -536,6 +542,10 @@ void setup()
     Serial.println("D");
     while (1);
   }
+
+  sensorD.setAddress(0x2A + 1);
+
+  sensorD.startContinuous(50);
 
   pinMode(xshutPinsC, INPUT);
   delay(10);
@@ -548,17 +558,9 @@ void setup()
     while (1);
   }
 
-  sensorD.setAddress(0x2A);
-
-  sensorD.startContinuous(50);
-
-  sensorC.setAddress(0x2A + 1);
+  sensorC.setAddress(0x2A + 2);
 
   sensorC.startContinuous(50);
-
-  sensorE.setAddress(0x2A + 2);
-
-  sensorE.startContinuous(50);
 
   ler_sensores();
   delay(2000);
