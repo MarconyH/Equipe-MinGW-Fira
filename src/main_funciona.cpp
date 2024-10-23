@@ -2,6 +2,8 @@
 #include <PID_v1.h>
 #include <Ultrasonic.h>
 #include <PinChangeInterrupt.h>
+#include <Wire.h>
+#include <VL53L1X.h>
 
 #define TRIGE A0 // Pino Trig Sensor Esquerda
 #define ECHOE A1 // Pino Echo Sensor Esquerda
@@ -29,6 +31,7 @@
 Ultrasonic sensorD(TRIGD, ECHOD);
 Ultrasonic sensorE(TRIGE, ECHOE);
 Ultrasonic sensorC(TRIGC, ECHOC);
+
 
 // Variáveis Globais
 float tamanho_carrinho;
@@ -104,8 +107,6 @@ double SetpointCentral = 15;
 double kpCentral = 5.0, kiCentral = 3.5, kdCentral = 2.0;
 PID PIDc(&distanciaC, &OutputC, &SetpointCentral, kpCentral, kiCentral,
          kdCentral, REVERSE);
-
-int ajuste_rpm(int melhor = 1);
 
 void ler_sensores()
 {
@@ -217,7 +218,9 @@ float tratamento(float vel)
   return vel;
 }
 
-void acelera(float vel_esquerda, float vel_direita, int ajustar_rpm = 0)
+int ajuste_rpm(int velocidade_melhor_real = velocidadeD, int velocidade_pior_real = velocidadeE);
+
+void acelera(float vel_esquerda, float vel_direita, int ajustar_rpm_var = 0)
 {
   // int vel_direita_int = ceil(tratamento((vel_direita* OutputC / MAX_VOLTAGE), MIN_VOLTAGE_DIR));
   // int vel_esquerda_int = ceil(tratamento((vel_esquerda* OutputC / MAX_VOLTAGE), MIN_VOLTAGE_ESQ));
@@ -225,7 +228,7 @@ void acelera(float vel_esquerda, float vel_direita, int ajustar_rpm = 0)
   int vel_direita_int = round(tratamento((vel_direita)));
   int vel_esquerda_int = round(tratamento((vel_esquerda)));
 
-  if (ajustar_rpm)
+  if (ajustar_rpm_var)
   {
     vel_direita_int = ajuste_rpm();
   }
@@ -432,7 +435,7 @@ double rpm_esquerdo(float x)
   return x+x/2;
 }
 
-int ajuste_rpm(int velocidade_melhor_real = velocidadeD, int velocidade_pior_real = velocidadeE)
+int ajuste_rpm(int velocidade_melhor_real, int velocidade_pior_real)
 {
 
   int diferenca_real = abs(velocidade_pior_real - velocidade_melhor_real);
