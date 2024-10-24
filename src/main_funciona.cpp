@@ -4,6 +4,9 @@
 #include <Wire.h>
 #include <VL53L1X.h>
 
+int rotacao_RPM_sensor2();
+int rotacao_RPM_sensor1();
+
 #define PINO_CH1 3
 #define PINO_CH2 2
 #define PINO_CH3 10
@@ -27,7 +30,7 @@ VL53L1X sensorC;
 VL53L1X sensorD;
 
 // Variáveis Globais
-float tamanho_carrinho;
+float tamanho_carrinho = 13.5;
 float tamanho_pista;
 
 float distanciaE;
@@ -87,9 +90,8 @@ const long tempo_atual = 1000;
 
 float MAX_DELTA = 40;
 
-float MAX_VOLTAGE = 92;
-float MIN_VOLTAGE_ESQ = 50;
-float MIN_VOLTAGE_DIR = 30;
+float MAX_VOLTAGE = 92; // em voltagem
+float MIN_PERCENT = 35; // em porcentagem
 
 double DIS_MAX = 7.1;
 double DIS_MIN = 0.1;
@@ -103,14 +105,17 @@ PID PIDc(&distanciaC, &OutputC, &SetpointCentral, kpCentral, kiCentral,
 
 void ler_sensores()
 {
-  distanciaE = sensorE.read();
-  sensorE.timeoutOccurred() ? distanciaE = -1 : distanciaE = distanciaE;
+  distanciaE = sensorE.read() - 20;
+  sensorE.timeoutOccurred() ? distanciaE = 4000 : distanciaE = distanciaE;
 
-  distanciaD = sensorD.read();
-  sensorD.timeoutOccurred() ? distanciaD = -1 : distanciaD = distanciaD;
+  distanciaD = sensorD.read() - 20;
+  sensorD.timeoutOccurred() ? distanciaD = 4000 : distanciaD = distanciaD;
 
   distanciaC = sensorC.read();
-  sensorC.timeoutOccurred() ? distanciaC = -1 : distanciaC = distanciaC;
+  sensorC.timeoutOccurred() ? distanciaC = 4000 : distanciaC = distanciaC;
+
+  velocidadeE = rotacao_RPM_sensor2();
+  velocidadeD = rotacao_RPM_sensor1();
 }
 
 // Robocore - Fonte
@@ -194,7 +199,7 @@ void imprimeDistancias()
 float tratamento(float vel)
 {
   vel = min(vel, 100);
-  vel = max(vel, 0);
+  vel = max(vel, MIN_PERCENT);
   vel = (vel)*MAX_VOLTAGE / 100;
   return vel;
 }
@@ -211,7 +216,11 @@ void acelera(float vel_esquerda, float vel_direita, int ajustar_rpm_var = 0)
 
   if (ajustar_rpm_var)
   {
-    vel_direita_int = ajuste_rpm();
+    int ajuste = ajuste_rpm();
+    if (ajuste > 0)
+    {
+      vel_esquerda_int = ajuste;
+    }
   }
 
   analogWrite(ENA, vel_esquerda_int);
@@ -234,7 +243,7 @@ void back()
 // unsigned long time_here_right = 0;
 // unsigned long last_time = 0;
 
-double output_func_math(int choice, float MIN_VOLTAGE, double referencia,
+double output_func_math(int choice, float MIN_PERCENT, double referencia,
                         double referencia_2 = 0)
 {
   double c;
@@ -243,13 +252,13 @@ double output_func_math(int choice, float MIN_VOLTAGE, double referencia,
   {
   // cosseno
   case 0:
-    return cos(referencia * acos(MIN_VOLTAGE / MAX_VOLTAGE) / DIS_MAX) *
+    return cos(referencia * acos(MIN_PERCENT / MAX_VOLTAGE) / DIS_MAX) *
            MAX_VOLTAGE;
 
   // quadratica
   case 1:
     c = MAX_VOLTAGE;
-    a = (MIN_VOLTAGE - MAX_VOLTAGE) / DIS_MAX * DIS_MAX;
+    a = (MIN_PERCENT - MAX_VOLTAGE) / DIS_MAX * DIS_MAX;
     return referencia * referencia * a + c;
 
   // linear
@@ -262,7 +271,7 @@ double output_func_math(int choice, float MIN_VOLTAGE, double referencia,
   // 3 variaveis, varia em relacao ao tempo
   case 3:
     c = MAX_VOLTAGE;
-    a = (MIN_VOLTAGE - MAX_VOLTAGE) / DIS_MAX * DIS_MAX;
+    a = (MIN_PERCENT - MAX_VOLTAGE) / DIS_MAX * DIS_MAX;
     if (a < 1)
     {
       return referencia * referencia * a * referencia_2 + c;
@@ -290,7 +299,7 @@ void ajuste(float delta)
   //  mais a direita
   if (delta > 0)
   {
-    valor_acelera = output_func_math(0, MIN_VOLTAGE_ESQ, abs(delta));
+    valor_acelera = output_func_math(0, MIN_PERCENT, abs(delta));
     valor_acelera = min(valor_acelera, 100);
     valor_acelera = max(valor_acelera, 0);
 
@@ -304,7 +313,7 @@ void ajuste(float delta)
   // mais a esquerda
   else if (delta < 0)
   {
-    valor_acelera = output_func_math(0, MIN_VOLTAGE_DIR, (delta));
+    valor_acelera = output_func_math(0, MIN_PERCENT, (delta));
     valor_acelera = min(valor_acelera, 100);
     valor_acelera = max(valor_acelera, 0);
     // time_here_left += (millis() - last_time);
@@ -394,11 +403,11 @@ int *livre()
   int *vector = new int[3];
   // 0 não está livre
   //  1 está livre
-  distanciaE < tamanho_pista * 1.1 ? vector[0] = 0 : vector[0] = 1;
+  distanciaE/10 < tamanho_pista * 1.5 ? vector[0] = 0 : vector[0] = 1;
 
-  distanciaC <= (tamanho_pista - tamanho_carrinho) / 2 ? vector[1] = 0 : vector[1] = 1;
+  distanciaC/10 <= (tamanho_pista - tamanho_carrinho) / 2 ? vector[1] = 0 : vector[1] = 1;
 
-  distanciaD < tamanho_pista * 1.1 ? vector[2] = 0 : vector[2] = 1;
+  distanciaD/10 < tamanho_pista * 1.5 ? vector[2] = 0 : vector[2] = 1;
 
   return vector;
 }
@@ -438,18 +447,20 @@ int ajuste_rpm(int velocidade_melhor_real, int velocidade_pior_real)
       menor_diferenca = i;
     }
   }
+
   return abs(rpm_esquerdo(menor_diferenca) - velocidade_melhor_real) < diferenca_real ? menor_diferenca : -1;
 }
 
 void frente(int *vector)
 {
-  digitalWrite(IN1, HIGH);
-  digitalWrite(IN3, HIGH);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN3, LOW);
   acelera(80, 80);
 }
 
 void virar_direita(int *vector)
 {
+  acelera(0,0);
   digitalWrite(IN1, LOW);
   digitalWrite(IN3, HIGH);
   acelera(80, 80);
@@ -476,8 +487,10 @@ void virar_esquerda(int *vector)
 
 void setup()
 {
-  while (!Serial) {}
-  
+  while (!Serial)
+  {
+  }
+
   Serial.begin(9600); // Comunicação Serial com o Computador
   pinMode(ENA, OUTPUT);
   pinMode(ENB, OUTPUT);
@@ -525,7 +538,8 @@ void setup()
   {
     Serial.print("Failed to detect and initialize sensor ");
     Serial.println("E");
-    while (1);
+    while (1)
+      ;
   }
 
   sensorE.setAddress(0x2A);
@@ -540,7 +554,8 @@ void setup()
   {
     Serial.print("Failed to detect and initialize sensor ");
     Serial.println("D");
-    while (1);
+    while (1)
+      ;
   }
 
   sensorD.setAddress(0x2A + 1);
@@ -555,15 +570,18 @@ void setup()
   {
     Serial.print("Failed to detect and initialize sensor ");
     Serial.println("C");
-    while (1);
+    while (1)
+      ;
   }
 
   sensorC.setAddress(0x2A + 2);
 
   sensorC.startContinuous(50);
 
-  ler_sensores();
   delay(2000);
+  ler_sensores();
+  tamanho_pista = distanciaD / 10 + distanciaE / 10 + tamanho_carrinho;
+  tamanho_pista = 30;
   time = millis();
   // last_time = time;
   // acelera(90,90);
@@ -573,17 +591,24 @@ void setup()
 
 void loop()
 {
-  // ler_sensores();
-  // float delta = distanciaE - distanciaD;
-  // int delta_velocidade = velocidadeE - velocidadeD;
+  ler_sensores();
+  float delta = distanciaE - distanciaD;
 
-  // int *vector = livre();
-  // if(vector[2])
-  // {
-  //   frente(vector);
-  //   delay(50);
-  //   virar_direita(vector);
-  // }
+  int delta_velocidade = velocidadeE - velocidadeD;
+
+  int *vector = livre();
+  frente(vector);
+  if (vector[2])
+  {
+    frente(vector);
+    delay(500);
+    virar_direita(vector);
+    while (1)
+    {
+      acelera(0, 0);
+    }
+  }
+
   // if(vector[1])
   // {
   //   frente(vector);
@@ -604,9 +629,6 @@ void loop()
   //     virar_direita(vector);
   //   }
   // }
-
-  ler_sensores();
-  imprimeDistancias();
 
   // int vector[3] = {0, 0, 1};
   // virar_esquerda(vector);
