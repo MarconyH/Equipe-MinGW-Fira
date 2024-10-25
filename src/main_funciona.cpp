@@ -3,6 +3,7 @@
 #include <PinChangeInterrupt.h>
 #include <Wire.h>
 #include <VL53L1X.h>
+#include <HardwareSerial.h>
 
 int rotacao_RPM_sensor2();
 int rotacao_RPM_sensor1();
@@ -24,6 +25,8 @@ int rotacao_RPM_sensor1();
 #define xshutPinsE 12
 #define xshutPinsC 9
 #define xshutPinsD 4
+
+// SoftwareSerial BTSerial(A0, A1); // RX, TX
 
 VL53L1X sensorE;
 VL53L1X sensorC;
@@ -516,6 +519,9 @@ void setup()
 
   pinMode(xshutPinsE, OUTPUT);
   digitalWrite(xshutPinsE, LOW);
+  pinMode(A3, OUTPUT);
+  pinMode(A2, INPUT);
+  digitalWrite(A3, HIGH);
 
   PIDc.SetSampleTime(10);
   PIDc.SetMode(AUTOMATIC);
@@ -597,18 +603,30 @@ void loop()
   int delta_velocidade = velocidadeE - velocidadeD;
 
   int *vector = livre();
-  frente(vector);
-  if (vector[2])
-  {
+  Serial.print("vector E: ");
+  Serial.println(distanciaE);
+  Serial.print("vector C: ");
+  Serial.println(distanciaC);
+  Serial.print("vector D: ");
+  Serial.println(distanciaD);
+  if (distanciaD > 150){
     frente(vector);
     delay(500);
     virar_direita(vector);
-    while (1)
-    {
-      acelera(0, 0);
+    
+  }else if(distanciaE < 150 && distanciaC < 100 && distanciaD < 150) {
+    virar_direita(vector);
+  }else if(distanciaC > 100){
+      if(distanciaD > distanciaE){
+      acelera(60, 80);
+    }else if(distanciaE>distanciaD){
+      acelera(80, 60);
+    }else{
+      frente(vector);
     }
+  }else if(distanciaE > 150){
+    virar_esquerda(vector); 
   }
-
   // if(vector[1])
   // {
   //   frente(vector);
