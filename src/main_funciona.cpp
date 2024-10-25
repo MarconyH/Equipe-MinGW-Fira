@@ -28,6 +28,7 @@ int rotacao_RPM_sensor1();
 
 // SoftwareSerial BTSerial(A0, A1); // RX, TX
 
+
 VL53L1X sensorE;
 VL53L1X sensorC;
 VL53L1X sensorD;
